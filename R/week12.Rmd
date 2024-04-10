@@ -15,6 +15,11 @@ library(jsonlite)
 library(tm)
 library(qdap)
 library(textstem)
+library(RWeka)
+library(ldatuning)
+library(topicmodels)
+library(parallel)
+library(doParallel)
 ```
 
 ## **Data Import and Cleaning**
@@ -92,17 +97,22 @@ io_corpus <- io_corpus_original %>%
   tm_map(content_transformer(function(x) gsub("[^[:alnum:] ]", "", x))) %>% # remove symbols such as '
   tm_map(content_transformer(lemmatize_words)) 
   
-
-compare_them(io_corpus_original, io_corpus)
+# compare_them(io_corpus_original, io_corpus) 
 ```
 
-io_corpus <- io_corpus_original %>%
-  tm_map(content_transformer(replace_abbreviation)) %>%
-  tm_map(content_transformer(replace_contraction)) %>%
-  tm_map(content_transformer(str_to_lower)) %>%
-  tm_map(removeNumbers) %>%
-  tm_map(removePunctuation) %>%
-  tm_map(removeWords, c(stopwords("en"), "io", "psychology", "psy", "psych")) %>%
-  tm_map(stripWhitespace) %>%
-  tm_map(content_transformer(lemmatize_words))
+Create DTM.
+```{r}
+# keep bi-grams
+myTokenizer <- function(x) {NGramTokenizer(x, Weka_control(min=1, max=2))}
+io_dtm <- DocumentTermMatrix(io_corpus, control = list(tokenize = myTokenizer))
+io_dtm_tbl <- io_dtm %>% as.matrix() %>% as_tibble() 
+io_slim_dtm <- removeSparseTerms(io_dtm, sparse = 0.996) # 800 obs w/ 347 variables, between 2/1 and 3/1
+io_slim_dtm_tbl <- io_slim_dtm %>% as.matrix() %>% as_tibble() 
+```
+
+## **Analysis**
+
+LDA.
+```{r}
+
 ```
