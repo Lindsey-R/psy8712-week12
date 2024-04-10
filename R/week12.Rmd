@@ -12,9 +12,12 @@ output:
 #setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 library(tidyverse)
 library(jsonlite)
+library(tm)
+library(qdap)
+library(textstem)
 ```
 
-## Data Import and Cleaning
+## **Data Import and Cleaning**
 
 The following code is usded to extract at least a year of post with jsonlite. 
 ```{r}
@@ -47,20 +50,59 @@ The following code is usded to extract at least a year of post with jsonlite.
 # }
 
 # saveRDS(posts_list, "./R/posts_list.RDS")
-posts_list <- readRDS("./R/posts_list.RDS")
+
+## Read in the dataset
+posts_list <- readRDS("posts_list.RDS")
 ```
 
-
+Make the tbl.
 ```{r}
 # Extract title and upvotes
 title <- posts_list$data.title
 upvotes <- posts_list$data.ups
 
-# save it into week2_tbl
-week12_tbl <- tibble(title,
-                     upvotes)
-
-
+# save it into week12_tbl
+week12_tbl <- tibble(title,upvotes) %>%
+  # Remove all IO Psych related stuff with empty space
+   mutate(title = str_replace_all(title, "\\b(i/o|io|IO|I/O|I-O|psy|Psy)\\w*\\b", "")) %>%
+   mutate(title = str_replace_all(title, "/|-|", " ")) # any / leftover replace with space so later they are not treated the same word
+  
 ```
 
+Compare Function
+```{r}
+compare_them <- function(x, y) {
+  casenum <- sample(1:nrow(week12_tbl), 1)
+  print(x[[casenum]]$content)
+  print(y[[casenum]]$content)
+}
+```
 
+Create corpus. I choose steps and their sequences mostly based on class recommendations as a good process; for some steps I did not see a lot differences in my output (maybe they are titles so they are abbreviated anyway). However, things like str_to_lower and removePunctuation are very helpful. 
+```{r}
+io_corpus_original <- VCorpus(VectorSource(week12_tbl$title))
+io_corpus <- io_corpus_original %>%
+  tm_map(content_transformer(replace_abbreviation)) %>% # replace all abbreviations but not working with M.S., B.A., B.S.
+  tm_map(content_transformer(replace_contraction)) %>% # replace contraction with expanded form
+  tm_map(content_transformer(str_to_lower)) %>% # replace upper case to lower case
+  tm_map(removeNumbers) %>% # remove numbers
+  tm_map(removePunctuation) %>% # remove punctuation
+  tm_map(removeWords, c(stopwords("en"), "amp")) %>% # remove words that do not convey meaning, I removed amp here because they are from html text and does not convey meaningful info
+  tm_map(stripWhitespace) %>% # remove all white spaces
+  tm_map(content_transformer(function(x) gsub("[^[:alnum:] ]", "", x))) %>% # remove symbols such as '
+  tm_map(content_transformer(lemmatize_words)) 
+  
+
+compare_them(io_corpus_original, io_corpus)
+```
+
+io_corpus <- io_corpus_original %>%
+  tm_map(content_transformer(replace_abbreviation)) %>%
+  tm_map(content_transformer(replace_contraction)) %>%
+  tm_map(content_transformer(str_to_lower)) %>%
+  tm_map(removeNumbers) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(removeWords, c(stopwords("en"), "io", "psychology", "psy", "psych")) %>%
+  tm_map(stripWhitespace) %>%
+  tm_map(content_transformer(lemmatize_words))
+```
