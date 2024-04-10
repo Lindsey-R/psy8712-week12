@@ -46,7 +46,8 @@ The following code is usded to extract at least a year of post with jsonlite.
 #   }
 # }
 
-saveRDS(posts_list, "./data/posts_list.RDS")
+# saveRDS(posts_list, "./R/posts_list.RDS")
+posts_list <- readRDS("./R/posts_list.RDS")
 ```
 
 
