@@ -20,6 +20,7 @@ library(ldatuning)
 library(topicmodels)
 library(parallel)
 library(doParallel)
+library(wordcloud)
 ```
 
 ## **Data Import and Cleaning**
@@ -109,6 +110,20 @@ io_dtm_tbl <- io_dtm %>% as.matrix() %>% as_tibble()
 io_slim_dtm <- removeSparseTerms(io_dtm, sparse = 0.996) # 800 obs w/ 347 variables, between 2/1 and 3/1
 io_slim_dtm_tbl <- io_slim_dtm %>% as.matrix() %>% as_tibble() 
 ```
+
+## **Visualization**
+
+Wordcloud. Receive warnings that 1 word pair (discussion reading) cannot fit so they cannot be plotted given they cannot fit on page. 
+In general most people are pursuing a job, or doing related research on jobs (mostly with masters).
+It is weired that despite of the lemmatize_words, job and jobs still appear at the same time. A lot of people are holding masters. 
+```{r}
+wordcloud(
+  words = names(io_dtm_tbl),
+  freq = colSums(io_dtm_tbl),
+  max.words = 25, # So many words to be plotted otherwise
+  colors = brewer.pal(9, "Blues"))
+```
+
 
 ## **Analysis**
 
