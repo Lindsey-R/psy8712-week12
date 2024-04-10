@@ -1,0 +1,65 @@
+---
+title: "PSY 8712 Week 8 Project"
+author: "Ziyu Ren"
+date: "2024-04-10"
+output:
+  html_document:
+    df_print: paged
+---
+
+## **Script Settings and Resources**
+```{r Script Settings and Resources, echo=TRUE, results='hide', message=FALSE, warning=FALSE}
+#setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+library(tidyverse)
+library(jsonlite)
+```
+
+## Data Import and Cleaning
+
+The following code is usded to extract at least a year of post with jsonlite. 
+```{r}
+# after <- NULL
+# posts_list <- data.frame()
+# one_year_ago <- (Sys.Date() - 365) %>% as.POSIXct() %>% as.numeric()  # Date one year ago
+# 
+# # Loop to fetch posts until you reach posts older than one month
+# repeat {
+#   # Construct the URL
+#   url <- paste0('https://oauth.reddit.com/r/iopsychology/new/.json?limit=100', ifelse(is.null(after), '', paste0('&after=', after)))
+#   
+#   # Make the request
+#   response <- fromJSON(url, flatten = TRUE)
+#   
+#   posts_batch <- response$data$children
+#   posts_date <- response$data$children$data.created_utc
+#   posts_list <- bind_rows(posts_list, posts_batch)
+#   
+#   # Check the date of the last post in the batch
+#   last_post_date <- max(posts_date)
+#   
+#   # Update the 'after' parameter for the next request
+#   after <- response$data$after
+#   
+#   # Break the loop if the last post is older than one month
+#   if (last_post_date < one_year_ago) {
+#     break
+#   }
+# }
+
+saveRDS(posts_list, "./data/posts_list.RDS")
+```
+
+
+```{r}
+# Extract title and upvotes
+title <- posts_list$data.title
+upvotes <- posts_list$data.ups
+
+# save it into week2_tbl
+week12_tbl <- tibble(title,
+                     upvotes)
+
+
+```
+
+
