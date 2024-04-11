@@ -34,7 +34,7 @@ The following code is usded to extract at least a year of post with jsonlite.
 # posts_list <- data.frame()
 # one_year_ago <- (Sys.Date() - 365) %>% as.POSIXct() %>% as.numeric()  # Date one year ago
 # 
-# # Loop to fetch posts until you reach posts older than one month
+# # Loop to fetch posts until you reach posts older than one year
 # repeat {
 #   # Construct the URL
 #   url <- paste0('https://oauth.reddit.com/r/iopsychology/new/.json?limit=100', ifelse(is.null(after), '', paste0('&after=', after)))
@@ -74,7 +74,8 @@ upvotes <- posts_list$data.ups
 week12_tbl <- tibble(title,upvotes) %>%
   # Remove all IO Psych related stuff with empty space
    mutate(title = str_replace_all(title, "\\b(i/o|io|IO|I/O|I-O|psy|Psy)\\w*\\b", "")) %>%
-   mutate(title = str_replace_all(title,  "-|/", " "))
+  # Remove all / or - otherwise will be treated as same word
+   mutate(title = str_replace_all(title,  "-|/", " ")) 
   
 ```
 
@@ -120,7 +121,7 @@ zero_elements <- tokenCounts[indices_zero] %>%
   as.numeric() # Save the number of rows being deleted
 # create tibble
 io_dtm_tbl <- io_dtm %>% as.matrix() %>% as_tibble() 
-io_slim_dtm <- removeSparseTerms(io_dtm, sparse = 0.996) # 800 obs w/ 347 variables, between 2/1 and 3/1
+io_slim_dtm <- removeSparseTerms(io_dtm, sparse = 0.997) # 794 obs w/ 344 variables, between 2/1 and 3/1
 io_slim_dtm_tbl <- io_slim_dtm %>% as.matrix() %>% as_tibble() 
 ```
 
