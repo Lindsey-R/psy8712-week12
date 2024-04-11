@@ -22,6 +22,8 @@ library(topicmodels)
 library(tidytext)
 library(parallel) # multiple cluster
 library(doParallel)
+library(psych)
+library(caret)
 ```
 
 ## **Data Import and Cleaning**
@@ -217,4 +219,48 @@ final_tbl <- tibble(title, upvotes) %>%
   select(doc_id, original, upvotes, topic, probability) 
 ```
 
-```{r St}
+
+For statistical analysis, I perform a anova.
+```{r ANOVA}
+model <- lm(upvotes ~ topic, data = final_tbl)
+summary(aov(model))
+```
+There is no significant difference among clusters. 
+
+For machine learning analysis, I perform a ols cause I only have one predictor topic, apparently other models need more than that. 
+```{r split data}
+final_tbl_predict <- final_tbl %>%
+  select(upvotes, topic)
+## Split Datasets
+### Randomly sort row numbers
+random_sample <- sample(nrow(final_tbl_predict))
+### Shuffle dataset
+final_shuffle_tbl <- final_tbl_predict[random_sample, ]
+### Find the 75% index
+index <- round(nrow(final_tbl_predict) * 0.75)
+### Create train data
+final_train_tbl <- final_shuffle_tbl[1:index, ]
+### Create test data
+final_test_tbl <- final_shuffle_tbl[(index+1):nrow(final_tbl_predict), ]
+### Create index for 10 foldes
+fold_indices <- createFolds(final_train_tbl$upvotes, 10) 
+## Set up train control
+myControl <- trainControl(method = "cv", # Cross-Validation
+                          indexOut = fold_indices, 
+                          number = 10,  #10 folds
+                          verboseIter = TRUE) ## Printing training log
+```
+
+
+ML: cv_rsq is 0.02, and ho_rsq is 0.00. Topic is not a significant predictor for upvotes, there is no difference (results converge with anova).
+```{r ols}
+model_ols <- train(upvotes ~ topic, 
+                       data = final_train_tbl,
+                       method = "lm",  
+                       preProcess = "medianImpute", ## Impute Median
+                       na.action = na.pass, ## So it will impute
+                       trControl = myControl)
+ols_predict <- predict(model_ols, final_test_tbl, na.action = na.pass)
+cv_rsq <- model_ols$results$Rsquared
+ho_rsq <- cor(ols_predict, final_test_tbl$upvotes)^2
+```
