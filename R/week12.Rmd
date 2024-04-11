@@ -11,22 +11,23 @@ output:
 ```{r Script Settings and Resources, echo=TRUE, results='hide', message=FALSE, warning=FALSE}
 #setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 library(tidyverse)
-library(jsonlite)
-library(tm)
-library(qdap)
+library(jsonlite) ## Extract Package
+library(tm) 
+library(qdap) ## NLP
 library(textstem)
-library(RWeka)
-library(ldatuning)
+library(RWeka) ## set bigram
+library(wordcloud) ## graph
+library(ldatuning) # LDA
 library(topicmodels)
-library(parallel)
+library(tidytext)
+library(parallel) # multiple cluster
 library(doParallel)
-library(wordcloud)
 ```
 
 ## **Data Import and Cleaning**
 
 The following code is usded to extract at least a year of post with jsonlite. 
-```{r}
+```{r import data}
 # after <- NULL
 # posts_list <- data.frame()
 # one_year_ago <- (Sys.Date() - 365) %>% as.POSIXct() %>% as.numeric()  # Date one year ago
@@ -61,8 +62,8 @@ The following code is usded to extract at least a year of post with jsonlite.
 posts_list <- readRDS("posts_list.RDS")
 ```
 
-Make the tbl.
-```{r}
+
+```{r Make the tbl.}
 # Extract title and upvotes
 title <- posts_list$data.title
 upvotes <- posts_list$data.ups
@@ -71,12 +72,12 @@ upvotes <- posts_list$data.ups
 week12_tbl <- tibble(title,upvotes) %>%
   # Remove all IO Psych related stuff with empty space
    mutate(title = str_replace_all(title, "\\b(i/o|io|IO|I/O|I-O|psy|Psy)\\w*\\b", "")) %>%
-   mutate(title = str_replace_all(title, "/|-|", " ")) # any / leftover replace with space so later they are not treated the same word
+   mutate(title = str_replace_all(title,  "-|/", " "))
   
 ```
 
-Compare Function
-```{r}
+
+```{r Compare Function}
 compare_them <- function(x, y) {
   casenum <- sample(1:nrow(week12_tbl), 1)
   print(x[[casenum]]$content)
@@ -85,7 +86,7 @@ compare_them <- function(x, y) {
 ```
 
 Create corpus. I choose steps and their sequences mostly based on class recommendations as a good process; for some steps I did not see a lot differences in my output (maybe they are titles so they are abbreviated anyway). However, things like str_to_lower and removePunctuation are very helpful. 
-```{r}
+```{r Create corpus.}
 io_corpus_original <- VCorpus(VectorSource(week12_tbl$title))
 io_corpus <- io_corpus_original %>%
   tm_map(content_transformer(replace_abbreviation)) %>% # replace all abbreviations but not working with M.S., B.A., B.S.
@@ -97,15 +98,25 @@ io_corpus <- io_corpus_original %>%
   tm_map(stripWhitespace) %>% # remove all white spaces
   tm_map(content_transformer(function(x) gsub("[^[:alnum:] ]", "", x))) %>% # remove symbols such as '
   tm_map(content_transformer(lemmatize_words)) 
-  
+
+
 # compare_them(io_corpus_original, io_corpus) 
 ```
 
-Create DTM.
-```{r}
+
+```{r Create DTM.}
 # keep bi-grams
 myTokenizer <- function(x) {NGramTokenizer(x, Weka_control(min=1, max=2))}
-io_dtm <- DocumentTermMatrix(io_corpus, control = list(tokenize = myTokenizer))
+io_dtm_empty <- DocumentTermMatrix(io_corpus, control = list(tokenize = myTokenizer))
+# Remove rows with all 0
+tokenCounts <- apply(io_dtm_empty, 1, sum)
+io_dtm <- io_dtm_empty[tokenCounts > 0, ]
+# Save the indices of zero for future reference
+indices_zero <- sapply(tokenCounts, function(x) x == 0)
+zero_elements <- tokenCounts[indices_zero] %>% 
+  names() %>% 
+  as.numeric() # Save the number of rows being deleted
+# create tibble
 io_dtm_tbl <- io_dtm %>% as.matrix() %>% as_tibble() 
 io_slim_dtm <- removeSparseTerms(io_dtm, sparse = 0.996) # 800 obs w/ 347 variables, between 2/1 and 3/1
 io_slim_dtm_tbl <- io_slim_dtm %>% as.matrix() %>% as_tibble() 
@@ -116,7 +127,7 @@ io_slim_dtm_tbl <- io_slim_dtm %>% as.matrix() %>% as_tibble()
 Wordcloud. Receive warnings that 1 word pair (discussion reading) cannot fit so they cannot be plotted given they cannot fit on page. 
 In general most people are pursuing a job, or doing related research on jobs (mostly with masters).
 It is weired that despite of the lemmatize_words, job and jobs still appear at the same time. A lot of people are holding masters. 
-```{r}
+```{r Wordcloud}
 wordcloud(
   words = names(io_dtm_tbl),
   freq = colSums(io_dtm_tbl),
@@ -127,7 +138,83 @@ wordcloud(
 
 ## **Analysis**
 
-LDA.
-```{r}
+LDA. Use as many clusters as possible. Both graphs suggest 5 factors, will test from 4 to 6. 
+```{r LDA.}
+cluster <- makeCluster(5) # R called fatal error with more clusters
+registerDoParallel(cluster)
 
+# LDA Tuning
+tuning <- FindTopicsNumber(io_dtm, 
+                           topics = seq(2,15,1), 
+                           metrics = c("Griffiths2004", 
+                                       "CaoJuan2009", 
+                                       "Arun2010", 
+                                       "Deveaud2014"),
+                           verbose = T)
+FindTopicsNumber_plot(tuning)
+
+stopCluster(cluster)
+registerDoSEQ()
 ```
+
+
+```{r Based on factors I choose the 5 cluster model.}
+# perform LDA
+lda_results <- LDA(io_dtm, 5)
+
+# beta matrix
+lda_betas <- tidy(lda_results, matrix="beta")
+lda_betas_result <- lda_betas %>% 
+  group_by(topic) %>% 
+  top_n(10, beta) %>% 
+  arrange(topic, -beta)
+
+# gamma matrix
+lda_gammas <- tidy(lda_results, matrix="gamma")
+lda_gammas_result <- lda_gammas %>% 
+  group_by(document) %>% 
+  top_n(1, gamma) %>% 
+  slice(1) %>% 
+  ungroup %>% 
+  mutate(document = as.numeric(document)) %>% 
+  arrange(document)
+```
+
+
+
+```{r Create topics_tbl}
+topics_tbl <- tibble(title) %>% # Use the original title vector
+  mutate(doc_id = 1:800) %>% # Create id variable
+  filter(!doc_id %in% zero_elements) %>% # Remove rows that are previously removed with zero-elements
+  full_join(lda_gammas_result, by = c("doc_id" = "document")) %>% # join gamma results
+  rename(original = title, probability = gamma) %>%
+  select(doc_id, original, topic, probability) # so don't select upvotes
+```
+
+### Answer Questions
+1. what topics would you conclude your final topic list maps onto?
+Cluster 1: job, interview. Could be how to find a IO related job and tips for interview.
+Cluster 2: survey / assessments, career. Creating surveys and assessments, career advices.
+Cluster 3: weekly discussions and readings. Maybe this is some weekly thing people do in this subreddit.
+Cluster 4: siop and career. Maybe how can one find career opportunities in SIOP. 
+Cluster 5: Graduate school and research. Question from graduate students about their research.
+
+2. Do your topic names derived from your interpretation of the beta matrix conceptually match with the content of the original posts? What kind of validity evidence does your answer to this question represent?
+Cluster 1 matches, but honestly most posts are talking about careers, so this just happens to capture it.
+Cluster 2 matches well. There are some posts in this cluster tlaking about needs assessment and scale development. Mostly still asking for career.
+Cluster 3 also gives a clear match. there is something about weekly discusssion.
+Cluster 4 and 5 matches normally. Again, most are about graduate students asking about IO career rather than research. 
+I think this reflect content/construct validity of our clusters / topics. The content validity of our analysis on topic looks fine. 
+
+
+
+```{r Creat final_tbl}
+final_tbl <- tibble(title, upvotes) %>% 
+  mutate(doc_id = 1:800) %>% # Create id variable
+  filter(!doc_id %in% zero_elements) %>% # Remove rows that are previously removed with zero-elements
+  full_join(lda_gammas_result, by = c("doc_id" = "document")) %>% # join gamma results
+  rename(original = title, probability = gamma) %>%
+  select(doc_id, original, upvotes, topic, probability) 
+```
+
+```{r St}
