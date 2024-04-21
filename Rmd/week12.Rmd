@@ -72,8 +72,6 @@ upvotes <- posts_list$data.ups
 
 # save it into week12_tbl
 week12_tbl <- tibble(title,upvotes) %>%
-  # Remove all IO Psych related stuff with empty space
-   mutate(title = str_replace_all(title, "\\b(i/o|io|IO|I/O|I-O|psy|Psy)\\w*\\b", "")) %>%
   # Remove all / or - otherwise will be treated as same word
    mutate(title = str_replace_all(title,  "-|/", " ")) 
   
@@ -95,12 +93,12 @@ io_corpus <- io_corpus_original %>%
   tm_map(content_transformer(replace_abbreviation)) %>% # replace all abbreviations but not working with M.S., B.A., B.S.
   tm_map(content_transformer(replace_contraction)) %>% # replace contraction with expanded form
   tm_map(content_transformer(str_to_lower)) %>% # replace upper case to lower case
+  tm_map(content_transformer(function(x) gsub("[^[:alnum:] ]", "", x))) %>% # remove symbols such as '
   tm_map(removeNumbers) %>% # remove numbers
   tm_map(removePunctuation) %>% # remove punctuation
-  tm_map(removeWords, c(stopwords("en"), "amp")) %>% # remove words that do not convey meaning, I removed amp here because they are from html text and does not convey meaningful info
+  tm_map(removeWords, c(stopwords("en"), "I/O", "io", "IO", "psychology", "Psychology", "psy", "psych","iopsychology", "I O")) %>% # remove words that do not convey meaning, I removed amp here because they are from html text and does not convey meaningful info
   tm_map(stripWhitespace) %>% # remove all white spaces
-  tm_map(content_transformer(function(x) gsub("[^[:alnum:] ]", "", x))) %>% # remove symbols such as '
-  tm_map(content_transformer(lemmatize_words)) 
+  tm_map(content_transformer(lemmatize_strings)) 
 
 
 # compare_them(io_corpus_original, io_corpus) 
@@ -127,9 +125,8 @@ io_slim_dtm_tbl <- io_slim_dtm %>% as.matrix() %>% as_tibble()
 
 ## **Visualization**
 
-Wordcloud. Receive warnings that 1 word pair (discussion reading) cannot fit so they cannot be plotted given they cannot fit on page. 
+
 In general most people are pursuing a job, or doing related research on jobs (mostly with masters).
-It is weired that despite of the lemmatize_words, job and jobs still appear at the same time. A lot of people are holding masters. 
 ```{r Wordcloud}
 wordcloud(
   words = names(io_dtm_tbl),
